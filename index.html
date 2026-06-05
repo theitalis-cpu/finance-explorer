@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finance Explorer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+    header { background: #1F3864; color: white; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 1.4rem; }
+    #last-updated { margin-right: auto; font-size: .8rem; opacity: .7; }
+    .tabs { display: flex; gap: 4px; padding: 16px 24px 0; background: white; border-bottom: 2px solid #e0e0e0; flex-wrap: wrap; }
+    .tab { padding: 10px 20px; cursor: pointer; border-radius: 6px 6px 0 0; font-size: 0.9rem; color: #555; }
+    .tab.active { background: #1F3864; color: white; }
+    .tab:hover:not(.active) { background: #f0f4ff; }
+    .page { display: none; padding: 24px; max-width: 1200px; margin: 0 auto; }
+    .page.active { display: block; }
+    .cards-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .kpi { background: white; border-radius: 12px; padding: 20px 24px; flex: 1; min-width: 160px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    .kpi .label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: .5px; }
+    .kpi .value { font-size: 1.8rem; font-weight: 700; color: #1F3864; margin-top: 4px; }
+    .kpi .value.negative { color: #c0392b; }
+    .kpi .value.positive { color: #27ae60; }
+    .chart-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.06); margin-bottom: 20px; }
+    .chart-card h3 { margin-bottom: 16px; color: #1F3864; font-size: 1rem; }
+    .tier-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .tier-box { flex: 1; min-width: 140px; border-radius: 10px; padding: 16px; color: white; }
+    .tier-box.must   { background: #c0392b; }
+    .tier-box.should { background: #e67e22; }
+    .tier-box.could  { background: #27ae60; }
+    .tier-box .tier-label { font-size: 0.8rem; opacity: .85; }
+    .tier-box .tier-amount { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+    .tier-box .tier-pct { font-size: .8rem; opacity: .8; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    th { background: #1F3864; color: white; padding: 12px 14px; font-size: 0.8rem; text-align: right; }
+    td { padding: 10px 14px; font-size: 0.85rem; border-bottom: 1px solid #f0f0f0; }
+    tr:hover td { background: #f8f9ff; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; }
+    .badge.must   { background: #fdecea; color: #c0392b; }
+    .badge.should { background: #fef3e2; color: #e67e22; }
+    .badge.could  { background: #eafaf1; color: #27ae60; }
+    .badge.none   { background: #f0f0f0; color: #999; }
+    .loader { text-align: center; padding: 40px; color: #888; font-size: 1rem; }
+    /* ── Expandable transaction rows ── */
+    .tx-row { transition: background 0.15s; }
+    .tx-row:hover td { background: #eef2ff !important; }
+    .tx-row-active td { background: #e8edff !important; border-bottom: none !important; }
+    .tx-expand-row td { padding: 0 !important; border-top: none !important; }
+    .tx-expand-panel { background: #f4f6ff; border-bottom: 2px solid #c5cef5; }
+    .tx-expand-inner { display: flex; align-items: center; gap: 10px; padding: 10px 18px; flex-wrap: wrap; }
+    .tx-expand-label { font-weight: 600; color: #3a3a5c; font-size: 0.88rem; }
+    .tx-similar-btn {
+      padding: 6px 14px; border-radius: 20px; border: 1.5px solid #6c7fd8;
+      background: #fff; color: #3a4a9c; font-size: 0.84rem; cursor: pointer;
+      font-family: inherit; transition: all 0.15s;
+    }
+    .tx-similar-btn:hover { background: #3a4a9c; color: #fff; }
+    .tx-expand-close { margin-right: auto; cursor: pointer; color: #999; font-size: 1.1rem; padding: 2px 6px; }
+    .tx-expand-close:hover { color: #c0392b; }
+    .tx-similar-header { padding: 8px 18px; font-weight: 700; color: #1a2a6c; font-size: 0.88rem; background: #dde3ff; }
+    .tx-similar-empty { padding: 12px 18px; color: #888; font-size: 0.88rem; }
+    .tx-similar-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .tx-similar-table th { background: #c8d0f5; padding: 6px 12px; text-align: right; font-weight: 600; color: #1a2a6c; }
+    .tx-similar-table td { padding: 5px 12px; border-bottom: 1px solid #e0e4f8; }
+    .tx-similar-table tr:last-child td { border-bottom: none; }
+    .tx-similar-table tr:hover td { background: #eef0fb; }
+    .filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .filter-row select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ddd; font-size: .9rem; }
+    .pagination-bar { display: flex; }
+    .pg-btn { padding: 5px 14px; border-radius: 6px; border: 1px solid #c5cef5; background: #f4f6ff; color: #1a2a6c; font-size: .85rem; cursor: pointer; }
+    .pg-btn:hover { background: #dde3ff; }
+    .pg-btn:disabled { opacity: .4; cursor: default; }
+    .tier-select { font-size: .75rem; font-weight: 600; border-radius: 10px; border: 1px solid #bbb; padding: 1px 6px; cursor: pointer; background: #fff; }
+    .tier-select.must   { background: #fdecea; color: #c0392b; border-color: #c0392b; }
+    .tier-select.should { background: #fef3e2; color: #e67e22; border-color: #e67e22; }
+    .tier-select.could  { background: #eafaf1; color: #27ae60; border-color: #27ae60; }
+    .tier-select.none   { background: #f0f0f0; color: #999; border-color: #ccc; }
+    /* Credit Bill */
+    .cb-total-card { background: linear-gradient(135deg,#1a2a6c,#2e75b6); color:#fff; border-radius:12px; padding:18px 26px; margin-bottom:14px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+    .cb-total-amount { font-size:2rem; font-weight:700; }
+    .cb-total-meta { font-size:.88rem; opacity:.85; }
+    .cb-cat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; margin-bottom:16px; }
+    .cb-cat-card { background:#f4f6ff; border:1px solid #dde3ff; border-radius:9px; padding:10px 14px; cursor:pointer; transition:all .15s; }
+    .cb-cat-card:hover { background:#dde3ff; border-color:#6c7fd8; transform:translateY(-1px); box-shadow:0 3px 10px rgba(0,0,0,.1); }
+    .cb-cat-card.active { background:#1F3864; border-color:#1F3864; }
+    .cb-cat-card.active .cb-cat-name { color:#bdd0f5; }
+    .cb-cat-card.active .cb-cat-amount { color:#fff; }
+    .cb-cat-card.active .cb-cat-count { color:#9ab5e0; }
+    .cb-cat-name { font-size:.82rem; color:#555; margin-bottom:3px; }
+    .cb-cat-amount { font-size:1.05rem; font-weight:700; color:#c0392b; }
+    .cb-cat-count { font-size:.75rem; color:#999; }
+    /* Category drill-down modal */
+    .cat-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center; }
+    .cat-modal-overlay.open { display:flex; }
+    .cat-modal { background:#fff; border-radius:14px; width:90%; max-width:820px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,.25); }
+    .cat-modal-header { background:#1F3864; color:#fff; padding:16px 22px; border-radius:14px 14px 0 0; display:flex; align-items:center; gap:12px; }
+    .cat-modal-title { font-size:1.05rem; font-weight:700; flex:1; }
+    .cat-modal-close { cursor:pointer; font-size:1.4rem; opacity:.8; background:none; border:none; color:#fff; line-height:1; }
+    .cat-modal-close:hover { opacity:1; }
+    .cat-modal-body { overflow-y:auto; padding:16px 22px; flex:1; }
+    .cat-modal-total { font-size:1.3rem; font-weight:700; color:#c0392b; margin-bottom:12px; }
+    .cat-modal-table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    .cat-modal-table th { background:#1F3864; color:#fff; padding:9px 12px; text-align:right; position:sticky; top:0; }
+    .cat-modal-table td { padding:8px 12px; border-bottom:1px solid #f0f0f0; }
+    .cat-modal-table tr:hover td { background:#f8f9ff; }
+    .cb-installment-box { background:#fff8e1; border:1px solid #ffe082; border-radius:10px; padding:14px 18px; margin-bottom:14px; }
+    .cb-installment-title { font-weight:700; color:#b45309; margin-bottom:8px; font-size:.92rem; }
+    .cb-installment-total { font-size:1.3rem; font-weight:700; color:#b45309; }
+    .cb-installment-table { width:100%; font-size:.82rem; border-collapse:collapse; margin-top:8px; }
+    .cb-installment-table th { background:#fef3c7; padding:5px 10px; text-align:right; color:#78350f; }
+    .cb-installment-table td { padding:4px 10px; border-bottom:1px solid #fde68a; }
+    .badge-installment { display:inline-block; font-size:.7rem; padding:1px 5px; border-radius:6px; background:#fff3cd; color:#856404; border:1px solid #ffc107; margin-right:4px; white-space:nowrap; }
+    .pending-installments-card { background:#fff8e1; border:1px solid #ffe082; border-radius:10px; padding:14px 18px; margin-top:12px; }
+    .pending-installments-card h4 { margin:0 0 8px; color:#b45309; font-size:.95rem; }
+    .pending-installments-card .big-amount { font-size:1.5rem; font-weight:700; color:#b45309; }
+    .pending-table { width:100%; font-size:.82rem; border-collapse:collapse; margin-top:8px; }
+    .pending-table th { background:#fef3c7; padding:5px 10px; text-align:right; color:#78350f; }
+    .pending-table td { padding:4px 10px; border-bottom:1px solid #fde68a; }
+    .empty-msg { color: #888; padding: 20px; }
+    /* Forecast */
+    .fc-projected-box { background:#fff8e1; border:1px solid #ffe082; border-radius:10px; padding:14px 18px; margin-bottom:14px; }
+    .fc-projected-title { font-weight:700; color:#b45309; margin-bottom:8px; font-size:.92rem; }
+    .fc-actual-box { background:#f4f6ff; border:1px solid #dde3ff; border-radius:10px; padding:14px 18px; margin-bottom:14px; }
+    .fc-actual-title { font-weight:700; color:#1a2a6c; margin-bottom:8px; font-size:.92rem; }
+    .fc-table { width:100%; font-size:.82rem; border-collapse:collapse; margin-top:6px; }
+    .fc-table th { padding:5px 10px; text-align:right; }
+    .fc-table td { padding:4px 10px; border-bottom:1px solid #eee; }
+    .kpi-sub { font-size:.72rem; color:#aaa; margin-top:2px; }
+    @keyframes tx-flash { 0%{background:#ffe082} 60%{background:#ffe082} 100%{background:transparent} }
+    .tx-highlighted td { animation: tx-flash 2s ease-out forwards; }
+    .similar-go-btn { padding: 3px 10px; border-radius: 12px; border: 1.5px solid #2e75b6; background: #f0f6ff; color: #1a3a7c; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+    .similar-go-btn:hover { background: #2e75b6; color: #fff; }
+    @media (max-width: 600px) { .cards-row { flex-direction: column; } .tier-bar { flex-direction: column; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:1.8rem">💰</span>
+  <h1>Finance Explorer</h1>
+  <span id="last-updated"></span>
+</header>
+
+<div class="tabs">
+  <div class="tab active"  onclick="showPage('overview',this)">סקירה כללית</div>
+  <div class="tab"         onclick="showPage('expenses',this)">ניהול הוצאות</div>
+  <div class="tab"         onclick="showPage('transactions',this)">עסקאות</div>
+  <div class="tab"         onclick="showPage('forecast',this)">תחזית ותקציב</div>
+  <div class="tab"         onclick="showPage('loans',this)">הלוואות</div>
+  <div class="tab"         onclick="showPage('savings',this)">חסכונות ופיקדונות</div>
+  <div class="tab"         onclick="showPage('credit-bill',this)">💳 חיוב אשראי חודשי</div>
+</div>
+
+<!-- OVERVIEW -->
+<div id="page-overview" class="page active">
+  <div class="cards-row" id="kpi-row"><div class="loader">טוען נתונים...</div></div>
+  <div class="chart-card">
+    <h3>תזרים מזומנים חודשי — הכנסות מול הוצאות</h3>
+    <canvas id="cashflow-chart" height="80"></canvas>
+  </div>
+  <div class="pending-installments-card" id="overview-pending" style="display:none"></div>
+</div>
+
+<!-- EXPENSE MANAGEMENT — ניהול נכון של ההוצאות -->
+<div id="page-expenses" class="page">
+  <div class="tier-bar" id="tier-bar"><div class="loader">טוען...</div></div>
+  <div class="chart-card">
+    <h3>פירוט הוצאות לפי קטגוריה — החודש הנוכחי</h3>
+    <canvas id="category-chart" height="100"></canvas>
+  </div>
+</div>
+
+<!-- TRANSACTIONS -->
+<div id="page-transactions" class="page">
+  <div class="filter-row">
+    <select id="filter-month" onchange="loadTransactions(0)">
+      <option value="">כל החודשים</option>
+    </select>
+    <select id="filter-tier" onchange="loadTransactions(0)">
+      <option value="">כל הרמות</option>
+      <option value="must">חובה</option>
+      <option value="should">כדאי</option>
+      <option value="could">ניתן לחסוך</option>
+    </select>
+  </div>
+  <div class="pagination-bar" id="tx-pagination" style="display:none;align-items:center;gap:10px;margin-bottom:10px;direction:rtl">
+    <button class="pg-btn" id="pg-prev" onclick="txPageStep(-1)">◀ הקודם</button>
+    <span id="pg-info" style="font-size:.88rem;color:#555"></span>
+    <button class="pg-btn" id="pg-next" onclick="txPageStep(1)">הבא ▶</button>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>תאריך</th><th>תיאור</th><th>סכום</th>
+        <th>קטגוריה</th><th>רמה</th><th>חשבון</th>
+      </tr>
+    </thead>
+    <tbody id="tx-tbody"><tr><td colspan="6" class="loader">טוען...</td></tr></tbody>
+  </table>
+  <div class="pagination-bar" id="tx-pagination-bottom" style="display:none;align-items:center;gap:10px;margin-top:10px;direction:rtl">
+    <button class="pg-btn" onclick="txPageStep(-1)">◀ הקודם</button>
+    <span id="pg-info-bottom" style="font-size:.88rem;color:#555"></span>
+    <button class="pg-btn" onclick="txPageStep(1)">הבא ▶</button>
+  </div>
+</div>
+
+<!-- FORECAST -->
+<div id="page-forecast" class="page">
+  <div class="filter-row" style="align-items:center">
+    <label style="font-weight:600;font-size:.92rem">תקופת חיוב:</label>
+    <select id="fc-period" onchange="loadForecast()" style="min-width:220px"></select>
+  </div>
+  <div id="fc-summary" style="display:none">
+    <div class="cards-row" id="fc-kpi-row"></div>
+    <div class="cb-cat-grid" id="fc-cat-grid"></div>
+  </div>
+  <!-- Projected installments -->
+  <div id="fc-projected-box" style="display:none"></div>
+  <!-- Actual transactions -->
+  <div id="fc-actual-box" style="display:none"></div>
+</div>
+
+<!-- LOANS -->
+<div id="page-loans" class="page">
+  <div id="loans-container" class="loader">טוען...</div>
+</div>
+
+<!-- SAVINGS -->
+<div id="page-savings" class="page">
+  <div id="savings-container" class="loader">טוען...</div>
+</div>
+
+<!-- CREDIT BILL -->
+<div id="page-credit-bill" class="page">
+  <div class="filter-row" style="align-items:center">
+    <label style="font-weight:600;font-size:.92rem">תקופת חיוב:</label>
+    <select id="cb-period" onchange="loadCreditBill()" style="min-width:220px"></select>
+    <span id="cb-cards" style="font-size:.8rem;color:#888;margin-right:8px"></span>
+  </div>
+
+  <!-- Summary strip -->
+  <div id="cb-summary" style="display:none">
+    <div class="cb-total-card" id="cb-total-card"></div>
+    <div class="cb-cat-grid" id="cb-cat-grid"></div>
+    <!-- New installments started this period (unpaid balance) -->
+    <div class="cb-installment-box" id="cb-installment-box" style="display:none"></div>
+    <!-- All pending installments across all periods -->
+    <div class="pending-installments-card" id="cb-all-pending" style="display:none"></div>
+  </div>
+
+  <!-- Transaction table -->
+  <table style="margin-top:14px">
+    <thead>
+      <tr>
+        <th>תאריך</th><th>תיאור</th><th>חיוב</th><th>קטגוריה</th><th>רמה</th><th>עריכת קטגוריה</th><th>עריכת רמה</th>
+      </tr>
+    </thead>
+    <tbody id="cb-tbody"><tr><td colspan="7" class="loader">בחר תקופה</td></tr></tbody>
+  </table>
+</div>
+
+<!-- Category drill-down modal (shared across all pages) -->
+<div class="cat-modal-overlay" id="cat-modal-overlay" onclick="closeCatModal(event)">
+  <div class="cat-modal" onclick="event.stopPropagation()">
+    <div class="cat-modal-header">
+      <span class="cat-modal-title" id="cat-modal-title"></span>
+      <button class="cat-modal-close" onclick="closeCatModal()">✕</button>
+    </div>
+    <div class="cat-modal-body" id="cat-modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ── Mode detection ────────────────────────────────────────────────────────────
+const IS_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+
+// ── Categories cache ──────────────────────────────────────────────────────────
+let _categories = [];   // [{id, name}, ...]
+async function ensureCategories() {
+  if (_categories.length) return;
+  try {
+    if (IS_LOCAL) {
+      _categories = await fetchData('/api/categories');
+    } else {
+      if (!_staticData) { const r = await fetch('data.json'); _staticData = await r.json(); }
+      _categories = _staticData['categories'] || [];
+    }
+  } catch(e) { console.warn('categories load failed', e); }
+}
+
+let _staticData = null;
+async function fetchData(endpoint) {
+  if (IS_LOCAL) {
+    const r = await fetch(endpoint);
+    if (!r.ok) throw new Error(`API error ${r.status}: ${endpoint}`);
+    return r.json();
+  }
+  if (!_staticData) {
+    const r = await fetch('data.json');
+    if (!r.ok) throw new Error('data.json not found');
+    _staticData = await r.json();
+  }
+  const [path, qs] = endpoint.split('?');
+  const key = path.replace('/api/', '');
+  const params = new URLSearchParams(qs || '');
+
+  // credit-bill and forecast-bill: keyed by "from_to" in static data
+  if (key === 'credit-bill' || key === 'forecast-bill') {
+    const billKey = `${params.get('from')}_${params.get('to')}`;
+    const bills = _staticData['credit-bill'] || {};
+    return bills[billKey] || { from: params.get('from'), to: params.get('to'),
+      total: 0, count: 0, cards: [], by_category: [],
+      period_unpaid_total: 0, period_new_installments: [], transactions: [] };
+  }
+
+  // transactions: static data has flat array, wrap in {total, rows} shape
+  if (key === 'transactions') {
+    const all = _staticData['transactions'] || [];
+    return { total: all.length, offset: 0, limit: all.length, rows: all };
+  }
+
+  // categories: flat array
+  if (key === 'categories') {
+    return _staticData['categories'] || [];
+  }
+
+  return _staticData[key] ?? _staticData;
+}
+
+// ── Formatting ────────────────────────────────────────────────────────────────
+const fmt = n => new Intl.NumberFormat('he-IL', {
+  style: 'currency', currency: 'ILS', maximumFractionDigits: 0
+}).format(n);
+
+const TIER_LABELS = { must: 'חובה', should: 'כדאי', could: 'ניתן לחסוך' };
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+let _cashflowChart = null;
+let _categoryChart = null;
+let _budgetChart   = null;
+
+function showPage(name, tabEl) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  if (tabEl) tabEl.classList.add('active');
+  if (name === 'transactions') loadTransactions();
+  if (name === 'forecast')     initForecast();
+  if (name === 'loans')        loadLoans();
+  if (name === 'savings')      loadSavings();
+  if (name === 'credit-bill')  initCreditBill();
+}
+
+// ── Overview ──────────────────────────────────────────────────────────────────
+async function loadOverview() {
+  try {
+    const d = await fetchData('/api/summary');
+
+    // KPI cards
+    const kpis = [
+      { label: 'שווי נטו',            value: d.net_worth,         colored: true },
+      { label: 'חסכונות ופיקדונות',   value: d.savings_total,     colored: false },
+      { label: 'השקעות',              value: d.investments_total, colored: false },
+      { label: 'יתרת הלוואות',        value: -d.loans_remaining,  colored: true },
+    ];
+    document.getElementById('kpi-row').innerHTML = kpis.map(k => `
+      <div class="kpi">
+        <div class="label">${k.label}</div>
+        <div class="value ${k.colored ? (k.value >= 0 ? 'positive' : 'negative') : ''}">
+          ${fmt(k.value)}
+        </div>
+      </div>`).join('');
+
+    // Cash flow bar chart
+    const cf = [...d.monthly_cash_flow].reverse();
+    if (_cashflowChart) _cashflowChart.destroy();
+    _cashflowChart = new Chart(document.getElementById('cashflow-chart'), {
+      type: 'bar',
+      data: {
+        labels: cf.map(r => r.month),
+        datasets: [
+          { label: 'הכנסות', data: cf.map(r => r.income),           backgroundColor: '#27ae6088' },
+          { label: 'הוצאות', data: cf.map(r => Math.abs(r.expenses)), backgroundColor: '#c0392b88' },
+        ]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'top' } } }
+    });
+
+    // Populate expense tiers on the expenses tab
+    const tiers = d.expense_tiers || {};
+    const total = Object.values(tiers).reduce((a, b) => a + b, 0);
+    document.getElementById('tier-bar').innerHTML = [
+      { key: 'must',   label: '🔴 חובה (Must-have)' },
+      { key: 'should', label: '🟡 כדאי (Should-be)' },
+      { key: 'could',  label: '🟢 ניתן לחסוך' },
+    ].map(t => `
+      <div class="tier-box ${t.key}">
+        <div class="tier-label">${t.label}</div>
+        <div class="tier-amount">${fmt(tiers[t.key] ?? 0)}</div>
+        <div class="tier-pct">${total > 0 ? Math.round((tiers[t.key] ?? 0) / total * 100) : 0}%</div>
+      </div>`).join('');
+
+    // Category donut chart (expenses tab)
+    // Fetch current month's transactions for the category chart
+    const _now = new Date(); const _mo = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
+    const _txRaw = await fetchData(`/api/transactions?limit=1000&offset=0&month=${_mo}`);
+    const txData = (_txRaw.rows || _txRaw);
+    const catTotals = {};
+    txData.forEach(tx => {
+      if (tx.amount < 0) {
+        const cat = tx.category_name || 'לא מקוטלג';
+        catTotals[cat] = (catTotals[cat] || 0) + Math.abs(tx.amount);
+      }
+    });
+    const sorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (_categoryChart) _categoryChart.destroy();
+    _categoryChart = new Chart(document.getElementById('category-chart'), {
+      type: 'doughnut',
+      data: {
+        labels: sorted.map(e => e[0]),
+        datasets: [{
+          data: sorted.map(e => e[1]),
+          backgroundColor: ['#1F3864','#2E75B6','#375623','#C55A11','#7030A0',
+                            '#00B0F0','#FF0000','#92D050','#FFC000','#4472C4']
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'right' } } }
+    });
+
+    // Populate month filter
+    const months = d.monthly_cash_flow.map(r => r.month);
+    const sel = document.getElementById('filter-month');
+    sel.innerHTML = '<option value="">כל החודשים</option>' +
+      months.map(m => `<option value="${m}">${m}</option>`).join('');
+
+    document.getElementById('last-updated').textContent =
+      'עודכן: ' + new Date().toLocaleDateString('he-IL');
+
+    // Pending installments widget on overview (works in both local and static mode)
+    try {
+      const pending = await fetchData('/api/installments-pending');
+      renderPendingInstallments(pending, document.getElementById('overview-pending'));
+    } catch(e) { /* non-critical */ }
+
+  } catch (e) {
+    document.getElementById('kpi-row').innerHTML =
+      `<div class="loader" style="color:#c0392b">שגיאה: ${e.message}</div>`;
+  }
+}
+
+// ── Transactions ──────────────────────────────────────────────────────────────
+// Cache of all loaded transactions for client-side similar search
+let _allTx = [];
+let _txOffset = 0;
+const TX_PAGE = 100;
+let _txTotal  = 0;
+let _highlightTxId = null;   // set before switching tab to highlight a specific row
+
+async function loadTransactions(offset) {
+  if (offset !== undefined) _txOffset = offset;
+  const month = document.getElementById('filter-month')?.value || '';
+  const tier  = document.getElementById('filter-tier')?.value || '';
+  let url = `/api/transactions?limit=${TX_PAGE}&offset=${_txOffset}`;
+  if (month) url += `&month=${encodeURIComponent(month)}`;
+  if (tier)  url += `&tier=${encodeURIComponent(tier)}`;
+
+  document.getElementById('tx-tbody').innerHTML =
+    `<tr><td colspan="6" class="loader">טוען...</td></tr>`;
+
+  try {
+    await ensureCategories();
+    const data = IS_LOCAL ? await fetchData(url) : { rows: await fetchData(url), total: null };
+    const rows = data.rows || data;   // fallback for static mode
+    _txTotal = data.total ?? rows.length;
+    _allTx = rows;
+    renderTxTable(rows);
+    renderPagination();
+  } catch(e) {
+    document.getElementById('tx-tbody').innerHTML =
+      `<tr><td colspan="6" style="color:#c0392b;padding:20px">שגיאה: ${e.message}</td></tr>`;
+  }
+}
+
+function txPageStep(dir) {
+  const newOffset = _txOffset + dir * TX_PAGE;
+  if (newOffset < 0 || newOffset >= _txTotal) return;
+  loadTransactions(newOffset);
+  window.scrollTo(0, document.getElementById('page-transactions').offsetTop - 60);
+}
+
+function renderPagination() {
+  const page    = Math.floor(_txOffset / TX_PAGE) + 1;
+  const pages   = Math.ceil(_txTotal / TX_PAGE);
+  const info    = `עמוד ${page} מתוך ${pages} (${_txTotal.toLocaleString()} עסקאות)`;
+  const show    = _txTotal > TX_PAGE;
+  ['tx-pagination','tx-pagination-bottom'].forEach(id => {
+    const bar = document.getElementById(id);
+    if (bar) bar.style.display = show ? 'flex' : 'none';
+  });
+  ['pg-info','pg-info-bottom'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = info;
+  });
+  document.querySelectorAll('#pg-prev').forEach(b => b.disabled = _txOffset === 0);
+  document.querySelectorAll('#pg-next').forEach(b => b.disabled = (_txOffset + TX_PAGE) >= _txTotal);
+}
+
+function tierDropdown(r, i, cache) {
+  // cache: optional array name string for updating in-memory data (e.g. '_allTx')
+  const opts = [
+    ['', '—'],
+    ['must', 'חובה'],
+    ['should', 'כדאי'],
+    ['could', 'ניתן לחסוך'],
+  ].map(([v, lbl]) =>
+    `<option value="${v}" ${r.tier === v || (!r.tier && v === '') ? 'selected' : ''}>${lbl}</option>`
+  ).join('');
+  return `<select class="tier-select ${r.tier||'none'}" data-txid="${r.id}" data-idx="${i}" data-cache="${cache||''}"
+    onclick="event.stopPropagation()"
+    onchange="saveTier(this)">${opts}</select>`;
+}
+
+function catDropdown(r, i, cache) {
+  const opts = [`<option value="">— קטגוריה —</option>`].concat(
+    _categories.map(c =>
+      `<option value="${c.id}" ${r.category_id === c.id ? 'selected' : ''}>${c.name}</option>`
+    )
+  ).join('');
+  return `<select class="tier-select none" style="max-width:130px;font-size:.72rem" data-txid="${r.id}" data-idx="${i}" data-cache="${cache||''}"
+    onclick="event.stopPropagation()"
+    onchange="saveCategory(this)">${opts}</select>`;
+}
+
+async function saveTier(selectEl) {
+  const txId = selectEl.dataset.txid;
+  const tier = selectEl.value;
+  selectEl.className = `tier-select ${tier||'none'}`;
+  // Update in-memory cache if present
+  const cache = selectEl.dataset.cache;
+  const idx   = parseInt(selectEl.dataset.idx);
+  if (cache === '_allTx' && _allTx[idx]) _allTx[idx].tier = tier || null;
+  if (!IS_LOCAL) return;
+  try {
+    await fetch(`/api/transactions/${txId}`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ tier })
+    });
+  } catch(e) { console.error('tier save failed', e); }
+}
+
+async function saveCategory(selectEl) {
+  const txId      = selectEl.dataset.txid;
+  const category_id = selectEl.value ? parseInt(selectEl.value) : null;
+  // Update display text of adjacent category cell if in main tx table
+  const cache = selectEl.dataset.cache;
+  const idx   = parseInt(selectEl.dataset.idx);
+  if (cache === '_allTx' && _allTx[idx]) {
+    _allTx[idx].category_id   = category_id;
+    const cat = _categories.find(c => c.id === category_id);
+    _allTx[idx].category_name = cat ? cat.name : null;
+  }
+  if (!IS_LOCAL) return;
+  try {
+    await fetch(`/api/transactions/${txId}`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ category_id: category_id || '' })
+    });
+  } catch(e) { console.error('category save failed', e); }
+}
+
+function renderTxTable(rows) {
+  const tbody = document.getElementById('tx-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-msg" style="text-align:center">אין עסקאות</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((r,i) => `
+    <tr class="tx-row" data-idx="${i}" data-txid="${r.id}" onclick="toggleTxExpand(this,${i})" style="cursor:pointer">
+      <td>${r.date}</td>
+      <td>${r.description || ''}</td>
+      <td style="color:${r.amount>=0?'#27ae60':'#c0392b'};font-weight:600">${fmt(r.amount)}</td>
+      <td>${catDropdown(r, i, '_allTx')}</td>
+      <td>${tierDropdown(r, i, '_allTx')}</td>
+      <td>${r.account_name || '—'}</td>
+    </tr>
+    <tr class="tx-expand-row" id="expand-${i}" style="display:none">
+      <td colspan="6" style="padding:0">
+        <div class="tx-expand-panel" id="expand-panel-${i}"></div>
+      </td>
+    </tr>`).join('');
+
+  // Scroll to + highlight a specific transaction if requested
+  if (_highlightTxId !== null) {
+    const target = tbody.querySelector(`tr[data-txid="${_highlightTxId}"]`);
+    if (target) {
+      target.classList.add('tx-highlighted');
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => target.classList.remove('tx-highlighted'), 2500);
+    }
+    _highlightTxId = null;
+  }
+}
+
+/** Switch to the Transactions tab and highlight a specific row by txId + date */
+function goToTransaction(txId, txDate) {
+  _highlightTxId = txId;
+  // Set month filter to the transaction's month so it's likely on page 1
+  const month = (txDate || '').substring(0, 7);  // "YYYY-MM"
+  const monthSel = document.getElementById('filter-month');
+  if (monthSel && month) {
+    // Try setting filter; if option doesn't exist, clear filter (will paginate)
+    const opt = [...monthSel.options].find(o => o.value === month);
+    monthSel.value = opt ? month : '';
+  }
+  // Navigate to transactions tab
+  const txTab = [...document.querySelectorAll('.tab')]
+    .find(t => t.textContent.trim() === 'עסקאות');
+  showPage('transactions', txTab);
+}
+
+function toggleTxExpand(rowEl, idx) {
+  const expandRow = document.getElementById(`expand-${idx}`);
+  const panel     = document.getElementById(`expand-panel-${idx}`);
+  const isOpen    = expandRow.style.display !== 'none';
+
+  // Close all others
+  document.querySelectorAll('.tx-expand-row').forEach(r => r.style.display = 'none');
+  document.querySelectorAll('.tx-row').forEach(r => r.classList.remove('tx-row-active'));
+
+  if (isOpen) return; // toggle off
+
+  rowEl.classList.add('tx-row-active');
+  expandRow.style.display = '';
+
+  const tx = _allTx[idx];
+  panel.innerHTML = `
+    <div class="tx-expand-inner">
+      <span class="tx-expand-label">הצג עסקאות דומות:</span>
+      <button class="tx-similar-btn" onclick="showSimilar(${idx},'amount')">
+        💰 אותו סכום (${fmt(tx.amount)})
+      </button>
+      <button class="tx-similar-btn" onclick="showSimilar(${idx},'description')">
+        📋 אותו תיאור ("${(tx.description||'').substring(0,20)}")
+      </button>
+      <span class="tx-expand-close" onclick="closeTxExpand(${idx})">✕</span>
+    </div>
+    <div id="similar-results-${idx}"></div>`;
+}
+
+function closeTxExpand(idx) {
+  document.getElementById(`expand-${idx}`).style.display = 'none';
+  document.querySelector(`[data-idx="${idx}"]`)?.classList.remove('tx-row-active');
+}
+
+async function showSimilar(idx, mode) {
+  const tx      = _allTx[idx];
+  const results = document.getElementById(`similar-results-${idx}`);
+
+  const label = mode === 'amount'
+    ? `עסקאות עם אותו סכום (${fmt(tx.amount)})`
+    : `עסקאות עם אותו תיאור ("${tx.description||''}")`;
+
+  results.innerHTML = `<div class="tx-similar-empty">טוען...</div>`;
+
+  let matches = [];
+  if (IS_LOCAL) {
+    // Hit the server for a full-DB search
+    const params = new URLSearchParams({ mode, exclude_id: tx.id });
+    if (mode === 'amount')       params.set('amount', tx.amount);
+    else                         params.set('description', tx.description || '');
+    try {
+      const res = await fetch(`/api/similar?${params}`);
+      matches = await res.json();
+    } catch(e) {
+      results.innerHTML = `<div class="tx-similar-empty">שגיאה בטעינה</div>`;
+      return;
+    }
+  } else {
+    // Static / GitHub Pages mode — fall back to loaded rows (ABS match)
+    if (mode === 'amount') {
+      const absAmt = Math.abs(tx.amount);
+      matches = _allTx.filter((r,i) => r.id !== tx.id && Math.abs(r.amount) === absAmt);
+    } else {
+      const desc = (tx.description || '').toLowerCase().trim();
+      matches = _allTx.filter((r,i) => r.id !== tx.id &&
+        (r.description||'').toLowerCase().trim() === desc);
+    }
+  }
+
+  if (!matches.length) {
+    results.innerHTML = `<div class="tx-similar-empty">אין עסקאות דומות במאגר</div>`;
+    return;
+  }
+
+  results.innerHTML = `
+    <div class="tx-similar-header">${label} — ${matches.length} עסקאות</div>
+    <table class="tx-similar-table">
+      <thead><tr>
+        <th></th><th>תאריך</th><th>תיאור</th><th>סכום</th><th>קטגוריה</th><th>רמה</th><th>קטגוריה (עריכה)</th><th>רמה (עריכה)</th><th>חשבון</th>
+      </tr></thead>
+      <tbody>${matches.map((r,si) => `<tr>
+        <td><button class="similar-go-btn" onclick="goToTransaction(${r.id},'${r.date}')" title="עבור לעסקה">📍 עבור</button></td>
+        <td>${r.date}</td>
+        <td>${r.description||''}</td>
+        <td style="color:${r.amount>=0?'#27ae60':'#c0392b'};font-weight:600">${fmt(r.amount)}</td>
+        <td>${r.category_name||'—'}</td>
+        <td><span class="badge ${r.tier||'none'}">${TIER_LABELS[r.tier]||'—'}</span></td>
+        <td>${catDropdown(r, si, '')}</td>
+        <td>${tierDropdown(r, si, '')}</td>
+        <td>${r.account_name||'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+// ── Forecast ──────────────────────────────────────────────────────────────────
+let _fcPeriods = [];
+
+function initForecast() {
+  if (_fcPeriods.length) { loadForecast(); return; }
+  // Build 12 periods: current + 11 future
+  const today = new Date();
+  let yr = today.getFullYear(), mo = today.getMonth(); // 0-indexed
+  if (today.getDate() < 10) mo -= 1;
+  if (mo < 0) { mo = 11; yr -= 1; }
+
+  const MONTHS_HE = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+  const sel = document.getElementById('fc-period');
+  sel.innerHTML = '';
+  for (let i = 0; i < 12; i++) {
+    const to_mo = mo + 1 > 11 ? 0  : mo + 1;
+    const to_yr = mo + 1 > 11 ? yr + 1 : yr;
+    const from = `${yr}-${String(mo+1).padStart(2,'0')}-10`;
+    const to   = `${to_yr}-${String(to_mo+1).padStart(2,'0')}-09`;
+    const isCurrent = i === 0;
+    const label = `${MONTHS_HE[mo]} ${yr}${isCurrent ? ' (נוכחית)' : ''}`;
+    _fcPeriods.push({ from, to, label });
+    sel.innerHTML += `<option value="${i}">${label}</option>`;
+    mo += 1; if (mo > 11) { mo = 0; yr += 1; }
+  }
+  loadForecast();
+}
+
+async function loadForecast() {
+  const idx = parseInt(document.getElementById('fc-period')?.value) || 0;
+  const period = _fcPeriods[idx];
+  if (!period) return;
+
+  document.getElementById('fc-summary').style.display = 'none';
+  document.getElementById('fc-projected-box').style.display = 'none';
+  document.getElementById('fc-actual-box').style.display = 'none';
+  document.getElementById('fc-kpi-row').innerHTML = '<div class="loader">טוען...</div>';
+  document.getElementById('fc-summary').style.display = '';
+
+  await ensureCategories();
+
+  let data;
+  try {
+    if (IS_LOCAL) {
+      data = await fetchData(`/api/forecast-bill?from=${period.from}&to=${period.to}`);
+    } else {
+      const bills = (_staticData || {})['forecast-bill'] || {};
+      const key = `${period.from}_${period.to}`;
+      data = bills[key] || null;
+      if (!data) {
+        if (!_staticData) { const r = await fetch('data.json'); _staticData = await r.json(); }
+        data = (_staticData['forecast-bill'] || {})[key] || { actual_total:0, projected_total:0, combined_total:0, actual_count:0, projected_count:0, by_category:[], actual_transactions:[], projected_installments:[], is_future: true };
+      }
+    }
+  } catch(e) {
+    document.getElementById('fc-kpi-row').innerHTML =
+      `<div style="color:#c0392b;padding:20px">שגיאה: ${e.message}</div>`;
+    return;
+  }
+
+  // ── KPI strip ──
+  const kpis = [
+    { label: 'חיוב בפועל',          value: data.actual_total,    sub: `${data.actual_count} עסקאות`,    color: '#c0392b' },
+    { label: 'תשלומים עתידיים ידועים', value: data.projected_total, sub: `${data.projected_count} תשלומים`, color: '#b45309' },
+    { label: 'סה"כ משוער',           value: data.combined_total,  sub: 'בפועל + עתידי',                  color: '#1a2a6c' },
+  ];
+  document.getElementById('fc-kpi-row').innerHTML = kpis.map(k => `
+    <div class="kpi">
+      <div class="label">${k.label}</div>
+      <div class="value" style="color:${k.color};font-size:1.4rem">₪${k.value.toLocaleString('he-IL',{minimumFractionDigits:2})}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join('');
+
+  // Store transactions for category drill-down (actual only; projected have no tx details)
+  _drillTxSource = data.actual_transactions || [];
+
+  // ── Category grid ──
+  document.getElementById('fc-cat-grid').innerHTML = (data.by_category || []).slice(0,12).map(c => `
+    <div class="cb-cat-card" onclick="showCatDrilldown('${c.category.replace(/'/g,"\\'")}', document.getElementById('fc-cat-grid'))">
+      <div class="cb-cat-name">${c.category}</div>
+      <div class="cb-cat-amount">₪${c.total.toLocaleString('he-IL',{minimumFractionDigits:2})}</div>
+    </div>`).join('');
+
+  // ── Projected installments ──
+  const projBox = document.getElementById('fc-projected-box');
+  if (data.projected_installments && data.projected_installments.length) {
+    projBox.className = 'fc-projected-box';
+    projBox.style.display = '';
+    const rows = data.projected_installments.map(p => `
+      <tr>
+        <td>${p.description}</td>
+        <td>${p.category_name || '—'}</td>
+        <td style="color:#b45309;font-weight:600">₪${p.amount.toLocaleString('he-IL',{minimumFractionDigits:2})}</td>
+        <td>${p.payment_number}/${p.installment_total}</td>
+        <td>${p.remaining_after} נותרים</td>
+      </tr>`).join('');
+    projBox.innerHTML = `
+      <div class="fc-projected-title">⚙️ תשלומי תשלומים ידועים לתקופה זו</div>
+      <table class="fc-table">
+        <thead style="background:#fef3c7"><tr>
+          <th>בית עסק</th><th>קטגוריה</th><th>סכום</th><th>תשלום</th><th>נותרים</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } else {
+    projBox.style.display = 'none';
+  }
+
+  // ── Actual transactions ──
+  const actBox = document.getElementById('fc-actual-box');
+  if (data.actual_transactions && data.actual_transactions.length) {
+    actBox.className = 'fc-actual-box';
+    actBox.style.display = '';
+    const rows = data.actual_transactions.map((r,i) => {
+      const instBadge = r.is_installment
+        ? `<span class="badge-installment">${r.installment_current}/${r.installment_total}</span>`
+        : '';
+      return `<tr>
+        <td>${r.date}</td>
+        <td>${instBadge}${r.description||''}</td>
+        <td style="color:${r.amount>=0?'#27ae60':'#c0392b'};font-weight:600">₪${Math.abs(r.amount).toLocaleString('he-IL',{minimumFractionDigits:2})}</td>
+        <td>${r.category_name||'—'}</td>
+        <td>${catDropdown(r, i, '')}</td>
+        <td>${tierDropdown(r, i, '')}</td>
+      </tr>`;
+    }).join('');
+    actBox.innerHTML = `
+      <div class="fc-actual-title">📋 עסקאות בפועל בתקופה (${data.actual_count})</div>
+      <table class="fc-table">
+        <thead style="background:#dde3ff"><tr>
+          <th>תאריך</th><th>תיאור</th><th>סכום</th><th>קטגוריה</th><th>עריכת קטגוריה</th><th>עריכת רמה</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } else if (data.is_future) {
+    actBox.className = 'fc-actual-box';
+    actBox.style.display = '';
+    actBox.innerHTML = `<div class="fc-actual-title">📋 עסקאות בפועל</div>
+      <div class="empty-msg">תקופה עתידית — אין עסקאות עדיין</div>`;
+  } else {
+    actBox.style.display = 'none';
+  }
+}
+
+// ── Loans ─────────────────────────────────────────────────────────────────────
+async function loadLoans() {
+  try {
+    const loans = await fetchData('/api/loans');
+    const el = document.getElementById('loans-container');
+    if (!loans.length) {
+      el.innerHTML = '<p class="empty-msg">אין הלוואות רשומות.</p>';
+      return;
+    }
+    el.innerHTML = `<table>
+      <thead><tr>
+        <th>שם הלוואה</th><th>קרן מקורית</th>
+        <th>תשלום חודשי</th><th>יתרה משוערת</th><th>תאריך סיום</th>
+      </tr></thead>
+      <tbody>${loans.map(l => `<tr>
+        <td>${l.name}</td>
+        <td>${fmt(l.principal)}</td>
+        <td>${fmt(l.monthly_payment)}</td>
+        <td style="color:#c0392b;font-weight:600">${fmt(l.remaining)}</td>
+        <td>${l.end_date}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch(e) {
+    document.getElementById('loans-container').innerHTML =
+      `<p style="color:#c0392b;padding:20px">שגיאה: ${e.message}</p>`;
+  }
+}
+
+// ── Savings ───────────────────────────────────────────────────────────────────
+async function loadSavings() {
+  try {
+    const savings = await fetchData('/api/savings');
+    const el = document.getElementById('savings-container');
+    if (!savings.length) {
+      el.innerHTML = '<p class="empty-msg">אין חסכונות ופיקדונות רשומים.</p>';
+      return;
+    }
+    el.innerHTML = `<table>
+      <thead><tr>
+        <th>שם חשבון</th><th>יתרה</th>
+        <th>ריבית</th><th>תאריך פירעון</th><th>עדכון אחרון</th>
+      </tr></thead>
+      <tbody>${savings.map(s => `<tr>
+        <td>${s.account_name}</td>
+        <td style="color:#27ae60;font-weight:600">${fmt(s.balance)}</td>
+        <td>${s.interest_rate != null ? s.interest_rate + '%' : '—'}</td>
+        <td>${s.maturity_date || '—'}</td>
+        <td>${s.date}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch(e) {
+    document.getElementById('savings-container').innerHTML =
+      `<p style="color:#c0392b;padding:20px">שגיאה: ${e.message}</p>`;
+  }
+}
+
+// ── Credit Bill ───────────────────────────────────────────────────────────────
+
+/** Build list of billing periods (10th–9th) going back from today */
+function buildCreditPeriods() {
+  const periods = [];
+  // Current period: find the most recent 10th that is <= today
+  const today = new Date();
+  let year = today.getFullYear();
+  let month = today.getMonth(); // 0-indexed
+
+  // If today is before the 10th, current period started on the 10th of LAST month
+  if (today.getDate() < 10) month -= 1;
+  if (month < 0) { month = 11; year -= 1; }
+
+  // Generate up to 24 periods back
+  for (let i = 0; i < 24; i++) {
+    const fromYear  = year;
+    const fromMonth = month;
+    const toMonth   = fromMonth + 1 > 11 ? 0  : fromMonth + 1;
+    const toYear    = fromMonth + 1 > 11 ? fromYear + 1 : fromYear;
+
+    const from = `${fromYear}-${String(fromMonth+1).padStart(2,'0')}-10`;
+    const to   = `${toYear}-${String(toMonth+1).padStart(2,'0')}-09`;
+
+    const MONTHS_HE = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני',
+                       'יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+    const label = `${MONTHS_HE[fromMonth]} ${fromYear} — 10/${fromMonth+1}–9/${toMonth+1}`;
+    periods.push({ from, to, label });
+
+    // Go back one month
+    month -= 1;
+    if (month < 0) { month = 11; year -= 1; }
+  }
+  return periods;
+}
+
+let _cbPeriods = [];
+
+function initCreditBill() {
+  if (_cbPeriods.length) return; // already initialised
+  _cbPeriods = buildCreditPeriods();
+  const sel = document.getElementById('cb-period');
+  sel.innerHTML = _cbPeriods.map((p, i) =>
+    `<option value="${i}">${p.label}</option>`
+  ).join('');
+  loadCreditBill();
+}
+
+async function loadCreditBill() {
+  const idx = parseInt(document.getElementById('cb-period').value) || 0;
+  const period = _cbPeriods[idx];
+  if (!period) return;
+
+  document.getElementById('cb-tbody').innerHTML =
+    `<tr><td colspan="7" class="loader">טוען...</td></tr>`;
+  document.getElementById('cb-summary').style.display = 'none';
+
+  await ensureCategories();
+
+  let data;
+  try {
+    data = await fetchData(`/api/credit-bill?from=${period.from}&to=${period.to}`);
+  } catch(e) {
+    document.getElementById('cb-tbody').innerHTML =
+      `<tr><td colspan="5" style="color:#c0392b;padding:20px">שגיאה: ${e.message}</td></tr>`;
+    return;
+  }
+
+  // ── Summary strip ──────────────────────────────────────────────────────────
+  const absTotal = Math.abs(data.total);
+  // Compute installment subtotals from transaction list
+  const txList = data.transactions || [];
+  const instOngoingAmt  = txList.filter(r => r.is_installment && r.installment_current > 1)
+                                .reduce((s,r) => s + Math.abs(r.amount), 0);
+  const instFirstAmt    = txList.filter(r => r.is_installment && r.installment_current === 1)
+                                .reduce((s,r) => s + Math.abs(r.amount), 0);
+  const regularAmt      = absTotal - instOngoingAmt - instFirstAmt;
+  document.getElementById('cb-total-card').innerHTML = `
+    <div>
+      <div style="font-size:.85rem;opacity:.8;margin-bottom:4px">סה"כ חיוב לתקופה</div>
+      <div class="cb-total-amount">₪${absTotal.toLocaleString('he-IL', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;font-size:.82rem;opacity:.9;margin-right:auto">
+      <div>🛒 רכישות חדשות: <strong>₪${regularAmt.toLocaleString('he-IL',{minimumFractionDigits:2})}</strong></div>
+      ${instFirstAmt > 0 ? `<div>🆕 תשלום ראשון (רכישות חדשות בתשלומים): <strong>₪${instFirstAmt.toLocaleString('he-IL',{minimumFractionDigits:2})}</strong></div>` : ''}
+      ${instOngoingAmt > 0 ? `<div>🔄 תשלומי תשלומים מתקופות קודמות: <strong>₪${instOngoingAmt.toLocaleString('he-IL',{minimumFractionDigits:2})}</strong></div>` : ''}
+    </div>
+    <div class="cb-total-meta">
+      <div>${data.count} עסקאות • ${period.from} – ${period.to}</div>
+    </div>`;
+
+  // Store transactions for category drill-down
+  _drillTxSource = data.transactions || [];
+
+  // Category cards — top 12 expenses only
+  const topCats = data.by_category.filter(c => c.total < 0).slice(0, 12);
+  const cbGrid = document.getElementById('cb-cat-grid');
+  cbGrid.innerHTML = topCats.map(c => `
+    <div class="cb-cat-card" onclick="showCatDrilldown('${c.category.replace(/'/g,"\\'")}', document.getElementById('cb-cat-grid'))">
+      <div class="cb-cat-name">${c.category}</div>
+      <div class="cb-cat-amount">₪${Math.abs(c.total).toLocaleString('he-IL', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+      <div class="cb-cat-count">${c.count} עסקאות</div>
+    </div>`).join('');
+
+  document.getElementById('cb-summary').style.display = '';
+
+  // Cards label
+  const cardCount = (data.cards || []).length;
+  document.getElementById('cb-cards').textContent =
+    cardCount > 1 ? `(${cardCount} כרטיסים)` : '(כרטיס 1)';
+
+  // ── New installments started this period ──────────────────────────────────
+  const instBox = document.getElementById('cb-installment-box');
+  const newInst = data.period_new_installments || [];
+  if (newInst.length && data.period_unpaid_total) {
+    instBox.style.display = '';
+    const rows = newInst.map(it => `
+      <tr>
+        <td>${it.description}</td>
+        <td>${it.installment_total} תשלומים</td>
+        <td>${it.remaining_payments} נותרו</td>
+        <td style="font-weight:600;color:#b45309">₪${it.remaining_amount.toLocaleString('he-IL',{minimumFractionDigits:2})}</td>
+      </tr>`).join('');
+    instBox.innerHTML = `
+      <div class="cb-installment-title">⚠️ עסקאות תשלומים שנפתחו בתקופה זו — יתרה עתידית לא שולמה</div>
+      <div class="cb-installment-total">₪${Math.abs(data.period_unpaid_total).toLocaleString('he-IL',{minimumFractionDigits:2})}</div>
+      <table class="cb-installment-table">
+        <thead><tr><th>בית עסק</th><th>סה"כ תשלומים</th><th>תשלומים שנותרו</th><th>יתרה לתשלום</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } else {
+    instBox.style.display = 'none';
+  }
+
+  // ── All pending installments (full picture) ───────────────────────────────
+  const allPendingEl = document.getElementById('cb-all-pending');
+  try {
+    const pending = await fetchData('/api/installments-pending');
+    renderPendingInstallments(pending, allPendingEl);
+  } catch(e) { allPendingEl.style.display = 'none'; }
+
+  // ── Transaction table ──────────────────────────────────────────────────────
+  if (!data.transactions.length) {
+    document.getElementById('cb-tbody').innerHTML =
+      `<tr><td colspan="5" class="empty-msg" style="text-align:center">אין עסקאות בתקופה זו</td></tr>`;
+    return;
+  }
+
+  document.getElementById('cb-tbody').innerHTML = data.transactions.map((r,i) => {
+    const instBadge = r.is_installment
+      ? `<span class="badge-installment">תשלום ${r.installment_current}/${r.installment_total}</span>`
+      : '';
+    return `<tr>
+      <td>${r.date}</td>
+      <td>${instBadge}${r.description || ''}</td>
+      <td style="color:${r.amount>=0?'#27ae60':'#c0392b'};font-weight:600">
+        ₪${Math.abs(r.amount).toLocaleString('he-IL', {minimumFractionDigits:2, maximumFractionDigits:2})}
+        ${r.is_installment && r.original_amount ? `<span style="font-size:.75rem;color:#888;font-weight:400"> / ₪${r.original_amount.toLocaleString('he-IL',{minimumFractionDigits:2})}</span>` : ''}
+      </td>
+      <td>${r.category_name || '—'}</td>
+      <td><span class="badge ${r.tier||'none'}">${TIER_LABELS[r.tier]||'—'}</span></td>
+      <td>${catDropdown(r, i, '')}</td>
+      <td>${tierDropdown(r, i, '')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPendingInstallments(pending, el) {
+  if (!pending || !pending.count) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const rows = pending.items.slice(0,15).map(it => `
+    <tr>
+      <td>${it.purchase_date}</td>
+      <td>${it.description}</td>
+      <td>${it.paid_so_far}/${it.installment_total}</td>
+      <td>${it.remaining_payments}</td>
+      <td>₪${it.per_payment.toLocaleString('he-IL',{minimumFractionDigits:2})}</td>
+      <td style="font-weight:700;color:#b45309">₪${it.remaining_amount.toLocaleString('he-IL',{minimumFractionDigits:2})}</td>
+    </tr>`).join('');
+  el.innerHTML = `
+    <h4>💳 עסקאות תשלומים פתוחות — יתרה עתידית כוללת</h4>
+    <div class="big-amount">₪${pending.total_remaining.toLocaleString('he-IL',{minimumFractionDigits:2})}</div>
+    <table class="pending-table" style="margin-top:10px">
+      <thead><tr>
+        <th>תאריך עסקה</th><th>בית עסק</th><th>שולם/סה"כ</th><th>נותרו</th><th>לתשלום/חודש</th><th>יתרה</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${pending.count > 15 ? `<div style="font-size:.8rem;color:#888;margin-top:6px">מוצגים 15 מתוך ${pending.count}</div>` : ''}`;
+}
+
+// ── Category drill-down modal ─────────────────────────────────────────────────
+// Each page stores its loaded transactions here when available
+let _drillTxSource = [];   // set by credit-bill and forecast loaders
+
+function showCatDrilldown(catName, gridEl) {
+  // Highlight active card
+  gridEl.querySelectorAll('.cb-cat-card').forEach(c => c.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+
+  const txs = _drillTxSource
+    .filter(r => (r.category_name || 'לא מקוטלג') === catName && r.amount < 0)
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  const total = txs.reduce((s, r) => s + Math.abs(r.amount), 0);
+
+  document.getElementById('cat-modal-title').textContent = `📂 ${catName} — ${txs.length} עסקאות`;
+  document.getElementById('cat-modal-body').innerHTML = `
+    <div class="cat-modal-total">סה"כ: ₪${total.toLocaleString('he-IL',{minimumFractionDigits:2})}</div>
+    <table class="cat-modal-table">
+      <thead><tr>
+        <th>תאריך</th><th>תיאור</th><th>סכום</th><th>רמה</th>
+      </tr></thead>
+      <tbody>${txs.map(r => {
+        const instBadge = r.is_installment
+          ? `<span class="badge-installment">${r.installment_current}/${r.installment_total}</span> `
+          : '';
+        return `<tr>
+          <td>${r.date}</td>
+          <td>${instBadge}${r.description || ''}</td>
+          <td style="color:#c0392b;font-weight:600">₪${Math.abs(r.amount).toLocaleString('he-IL',{minimumFractionDigits:2})}</td>
+          <td><span class="badge ${r.tier||'none'}">${TIER_LABELS[r.tier]||'—'}</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  document.getElementById('cat-modal-overlay').classList.add('open');
+}
+
+function closeCatModal(e) {
+  if (e && e.target !== document.getElementById('cat-modal-overlay')) return;
+  document.getElementById('cat-modal-overlay').classList.remove('open');
+  document.querySelectorAll('.cb-cat-card').forEach(c => c.classList.remove('active'));
+}
+
+// Close on Escape key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCatModal();
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadOverview();
+</script>
+</body>
+</html>
